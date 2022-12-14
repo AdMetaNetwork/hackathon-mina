@@ -11,6 +11,9 @@ For user privacy data, we use Mina's zero-knowledge proof to achieve the purpose
 2. Every certain period, such as once a day, analyze data, and count the top three tags of user behavior as soul behavior.
 3. Accurately place advertisements through the user's soul behavior.
 
+### Workflow
+![Workflow](/img/s4.png "Workflow")
+
 ### Future plan
 We will be the largest advertising platform in the Web3 world.
 1. Push accurate advertisements to users
