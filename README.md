@@ -1,7 +1,13 @@
-## Admeta & Mina zero-knowledge proof 
+## AdMeta & Mina zero-knowledge proof 
+This is the AdMeta demo project with ZK implementation on Mina Blockchain.
 
 ### Introduction
-In the Web3 world, advertising is also a very important part. Admeta is an advertising platform that focuses on Web3. Through this project, after the user authorizes the browser to access the white list, we endow the user with a soul label by analyzing the user's behavior , with this label, users can be accurately placed with advertisements and get rewards after completing the advertisements.
+Online advertising is in greater demand than ever before. AdmMta is an advertising platform that focuses on Web3. 
+
+In this project, users can first authorize AdMeta Extension to track the browsing time of whitelisted websites, and thereafter users will be entitled with corresponding soul labels out of analysis of their browsing behaviors. With these labels, users can be accurately targeted with advertisements and claim rewards after completing the advertisement tasks.
+
+### Demo Video
+https://youtu.be/tgWDPX8ePFU
 
 ### Use Mina
 For user privacy data, we use Mina's zero-knowledge proof to achieve the purpose of safely protecting user data.
