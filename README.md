@@ -13,6 +13,7 @@ For user privacy data, we use Mina's zero-knowledge proof to achieve the purpose
 
 ### Workflow
 ![Workflow](/img/s4.png "Workflow")
+![Client](/img/s5.png "Client")
 
 ### Future plan
 We will be the largest advertising platform in the Web3 world.

@@ -8,4 +8,4 @@ export const DOMAIN_CONFIG_URL = 'https://raw.githubusercontent.com/AdMetaNetwor
 export const REPORTING_TIME = 1000 * 2
 
 // export const WEP_URL = 'http://localhost:3000/'
-export const WEP_URL = 'https://45.8.133.193:3020/'
+export const WEP_URL = 'https://hackathon.mina.admeta.network/'

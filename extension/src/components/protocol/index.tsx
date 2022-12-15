@@ -1,6 +1,7 @@
 import { FC } from "react";
 import BaseButton from "../ui/base-button";
 import browser from 'webextension-polyfill'
+import * as U from '../../util'
 
 interface Prop {
   handleAgree: () => void
@@ -15,8 +16,11 @@ const Protocol: FC<Prop> = ({ handleAgree }) => {
       <div className="mb-8">
         <div className="text-white text-lg font-light italic mb-1">The domain whitelist:</div>
         <ul className="list-inside">
-          <li className="text-white text-base font-thin italic">xxxx.xx.com</li>
-          <li className="text-white text-base font-thin italic">xxxx.xx.com</li>
+          {
+            U.WHITE_LIST.products.map((item, index) => (
+              <li key={index} className="text-white text-base font-thin italic">{item.domain}</li>
+            ))
+          }
         </ul>
       </div>
       <div className="flex justify-center mb-10">
@@ -26,7 +30,7 @@ const Protocol: FC<Prop> = ({ handleAgree }) => {
             browser.storage.local.set({ agree_protocol: true }).then(() => {
               handleAgree()
             })
-            
+
           }}
         />
       </div>

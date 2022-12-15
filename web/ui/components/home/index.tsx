@@ -29,6 +29,7 @@ const Home: FC = () => {
   const [soul, setSoul] = useState<any>([])
   const [spinning, setSpinning] = useState<boolean>(false)
   const [zkWorkerClient, setZkWorkerClient] = useState(null as null | U.ZkWorkerClient)
+  const [useLocal, setUseLocal] = useState<boolean>(true)
 
   const getTag = async () => {
     let { data } = await axios.get(`${U.API}/score/check/${address?.toBase58()}`)
@@ -50,70 +51,77 @@ const Home: FC = () => {
 
   }
 
+  const loadLocalMina = async () => {
+    const Local = Mina.LocalBlockchain();
+    Mina.setActiveInstance(Local);
+    const deployerAccount = Local.testAccounts[0].privateKey;
+
+    const zkAppPrivateKey = PrivateKey.random();
+    const zkAppAddress = zkAppPrivateKey.toPublicKey();
+
+    const { Analysis } = await import('../../../contracts/build/src/Analysis.js');
+    const contract = new Analysis(zkAppAddress);
+    const deployTxn = await Mina.transaction(deployerAccount, () => {
+      AccountUpdate.fundNewAccount(deployerAccount);
+      contract.deploy({ zkappKey: zkAppPrivateKey });
+      contract.sign(zkAppPrivateKey);
+    });
+    await deployTxn.send();
+    const tagList = await contract.tagList.get();
+    console.log('state after init:', tagList.toString(), tagList);
+    setSpinning(false)
+  }
+
+  const loadBerkeleyMina = async (address: PublicKey) => {
+    const zkWorkerClient = new U.ZkWorkerClient();
+    console.log('Loading SnarkyJS...');
+    await zkWorkerClient.loadSnarkyJS();
+    console.log('done');
+
+    await zkWorkerClient.setActiveInstanceToBerkeley();
+
+    const mina = (window as any).mina;
+    if (!mina) {
+      console.log('Please install mina extension!')
+      return
+    }
+
+    console.log('using key', address);
+
+    console.log('checking if account exists...', address);
+    await zkWorkerClient.fetchAccount({ publicKey: address! });
+
+
+    await zkWorkerClient.loadContract();
+
+    console.log('compiling zkApp');
+    await zkWorkerClient.compileContract();
+    console.log('zkApp compiled');
+
+    const zkappPublicKey = PublicKey.fromBase58('B62qjNhg958yqDDjznuZKHxFthfQKf1Jo15d6MtEswHp7iQBiThhccm');
+
+    await zkWorkerClient.initZkappInstance(zkappPublicKey);
+    await zkWorkerClient.fetchAccount({ publicKey: zkappPublicKey })
+
+
+    setZkWorkerClient(zkWorkerClient)
+    const tagList = await zkWorkerClient.getTagList();
+    console.log('state after init:', tagList.toString(), tagList);
+    setSpinning(false)
+  }
+
   const loadMina = async (address: PublicKey) => {
-    const useLocal = false;
     await isReady;
     if (useLocal) {
-      const Local = Mina.LocalBlockchain();
-      Mina.setActiveInstance(Local);
-      const deployerAccount = Local.testAccounts[0].privateKey;
-
-      const zkAppPrivateKey = PrivateKey.random();
-      const zkAppAddress = zkAppPrivateKey.toPublicKey();
-
-      const { Analysis } = await import('../../../contracts/build/src/Analysis.js');
-      const contract = new Analysis(zkAppAddress);
-      const deployTxn = await Mina.transaction(deployerAccount, () => {
-        AccountUpdate.fundNewAccount(deployerAccount);
-        contract.deploy({ zkappKey: zkAppPrivateKey });
-        contract.sign(zkAppPrivateKey);
-      });
-      await deployTxn.send();
-      const tagList = contract.tagList.get();
-      console.log('state after init:', tagList.toString(), tagList);
-      setSpinning(false)
+      loadLocalMina()
     } else {
-      const zkWorkerClient = new U.ZkWorkerClient();
-      console.log('Loading SnarkyJS...');
-      await zkWorkerClient.loadSnarkyJS();
-      console.log('done');
-
-      await zkWorkerClient.setActiveInstanceToBerkeley();
-
-      const mina = (window as any).mina;
-      if (!mina) {
-        console.log('Please install mina extension!')
-        return
-      }
-
-      console.log('using key', address);
-
-      console.log('checking if account exists...', address);
-      await zkWorkerClient.fetchAccount({ publicKey: address! });
-
-
-      await zkWorkerClient.loadContract();
-
-      console.log('compiling zkApp');
-      await zkWorkerClient.compileContract();
-      console.log('zkApp compiled');
-
-      const zkappPublicKey = PublicKey.fromBase58('B62qjNhg958yqDDjznuZKHxFthfQKf1Jo15d6MtEswHp7iQBiThhccm');
-
-      await zkWorkerClient.initZkappInstance(zkappPublicKey);
-      await zkWorkerClient.fetchAccount({ publicKey: zkappPublicKey })
-
-
-      setZkWorkerClient(zkWorkerClient)
-      const tagList = zkWorkerClient.getTagList();
-      console.log('state after init:', tagList.toString(), tagList);
-      setSpinning(false)
+      loadBerkeleyMina(address)
     }
 
   }
 
   const initState = async () => {
-    const storageServerAddress = 'http://localhost:3001';
+    const storageServerAddress = 'http://localhost:3030';
     const XMLHttpRequestTs = await import('xmlhttprequest-ts')
     const NodeXMLHttpRequest = XMLHttpRequestTs.XMLHttpRequest as any as typeof XMLHttpRequest;
     const serverPublicKey = await OffChainStorage.getPublicKey(
@@ -153,45 +161,8 @@ const Home: FC = () => {
     }
   }
 
-  const updateTaglist = async () => {
-    console.log('sending a transaction...', address!.toBase58());
-    await zkWorkerClient!.fetchAccount({ publicKey: address! });
-
-    const zkAppPrivateKey = PrivateKey.random();
-    const zkAppAddress = zkAppPrivateKey.toPublicKey();
-    const newList = Poseidon.hash([Field(101), Field(102), Field(103)]);
-    const signature = Signature.create(zkAppPrivateKey, newList.toFields());
-
-    await zkWorkerClient!.createUpdateTagListTransaction(Field(1), signature, zkAppAddress);
-
-    console.log('creating proof...');
-    await zkWorkerClient!.proveUpdateTransaction();
-
-    console.log('getting Transaction JSON...');
-    const transactionJSON = await zkWorkerClient!.getTransactionJSON()
-
-    console.log('requesting send transaction...', transactionJSON);
-    try {
-      const { hash } = await (window as any).mina.sendTransaction({
-        transaction: transactionJSON,
-        feePayer: {
-          fee: transactionFee,
-          memo: '',
-        },
-      });
-
-      console.log(
-        'See transaction at https://berkeley.minaexplorer.com/transaction/' + hash
-      );
-
-
-    } catch (error) {
-      console.log(error)
-    }
-  }
-
-  const updateMerkeTree = async () => {
-    const storageServerAddress = 'http://localhost:3001';
+  const updateMerkeTreeBerkeley = async () => {
+    const storageServerAddress = 'http://localhost:3030';
     const XMLHttpRequestTs = await import('xmlhttprequest-ts')
     const NodeXMLHttpRequest = XMLHttpRequestTs.XMLHttpRequest as any as typeof XMLHttpRequest;
     const serverPublicKey = await OffChainStorage.getPublicKey(
@@ -204,6 +175,33 @@ const Home: FC = () => {
       return
     }
 
+    const arr: any[] = []
+    Object.keys(data[0]).forEach((key) => {
+      if (key !== 'address' && key !== 'id') {
+        arr.push({ name: key, score: data[0][key] })
+      }
+    })
+
+    arr.sort((a, b) => {
+      return b.score - a.score;
+    })
+
+    const flag: any = {
+      DeFi: 101,
+      GameFi: 102,
+      Metaverse: 103,
+      NFT: 104,
+      OnChainData: 105,
+    }
+
+    let a = ''
+    arr.forEach((item, index) => {
+      if (index <= 2) {
+        a += flag[item.name]
+      }
+    })
+    let d = `${data[0].id}${a}`
+
     const index = BigInt(data[0].id)
     console.log(index)
     const treeRoot = await zkWorkerClient!.getTreeRoot();
@@ -212,8 +210,6 @@ const Home: FC = () => {
     const pub = PrivateKey.fromBase58(
       'EKDjbx8B4upP8q2d5T8wZQaeMqi9SrDELfhPZcpe9JHAcdDwoBvB'
     ).toPublicKey();
-
-
 
     const idx2fields = await OffChainStorage.get(
       storageServerAddress,
@@ -233,10 +229,10 @@ const Home: FC = () => {
     let newLeafNumber: Field;
     if (!priorLeafIsEmpty) {
       priorLeafNumber = idx2fields.get(index)![0];
-      newLeafNumber = Field(9);
+      newLeafNumber = Field(d);
     } else {
       priorLeafNumber = Field(0);
-      newLeafNumber = Field(99);
+      newLeafNumber = Field(1);
     }
 
     idx2fields.set(index, [newLeafNumber]);
@@ -294,10 +290,133 @@ const Home: FC = () => {
     }
   }
 
-  const getTagList = async () => {
-    const tagList = await zkWorkerClient!.getTagList();
-    console.log('state after init:', tagList.toString(), tagList);
+  const updateMerkeTreeLocal = async () => {
+    await isReady;
+    const storageServerAddress = 'http://localhost:3030';
+    const XMLHttpRequestTs = await import('xmlhttprequest-ts')
+    const NodeXMLHttpRequest = XMLHttpRequestTs.XMLHttpRequest as any as typeof XMLHttpRequest;
+    const serverPublicKey = await OffChainStorage.getPublicKey(
+      storageServerAddress,
+      NodeXMLHttpRequest
+    )
+
+    const Local = Mina.LocalBlockchain();
+    Mina.setActiveInstance(Local);
+    const deployerAccount = Local.testAccounts[0].privateKey;
+
+    const zkAppPrivateKey = PrivateKey.random();
+    const zkAppAddress = zkAppPrivateKey.toPublicKey();
+    const { Analysis } = await import('../../../contracts/build/src/Analysis.js');
+    const contract = new Analysis(zkAppAddress);
+
+    // deploy
+    const deployTxn = await Mina.transaction(deployerAccount, () => {
+      AccountUpdate.fundNewAccount(deployerAccount);
+      contract.deploy({ zkappKey: zkAppPrivateKey });
+      contract.initState(serverPublicKey, Field('99'), Field('22'))
+      contract.sign(zkAppPrivateKey);
+    });
+    await deployTxn.send();
+
+    let { data } = await axios.get(`${U.API}/score/check/${address?.toBase58()}`)
+    if (!data.length) {
+      return
+    }
+
+    const arr: any[] = []
+    Object.keys(data[0]).forEach((key) => {
+      if (key !== 'address' && key !== 'id') {
+        arr.push({ name: key, score: data[0][key] })
+      }
+    })
+
+    arr.sort((a, b) => {
+      return b.score - a.score;
+    })
+
+    const index = BigInt(data[0].id)
+
+    const treeRoot = await contract.storageTreeRoot.get();
+    const treeHeight = 8;
+    const pub = PrivateKey.fromBase58(
+      'EKDjbx8B4upP8q2d5T8wZQaeMqi9SrDELfhPZcpe9JHAcdDwoBvB'
+    ).toPublicKey();
+
+    console.log(index)
+    console.log('treeRoot', treeRoot.toString())
+
+    const idx2fields = await OffChainStorage.get(
+      storageServerAddress,
+      pub,
+      treeHeight,
+      treeRoot,
+      NodeXMLHttpRequest
+    );
+
+    const tree = OffChainStorage.mapToTree(treeHeight, idx2fields);
+    // return
+    const flag: any = {
+      DeFi: 101,
+      GameFi: 102,
+      Metaverse: 103,
+      NFT: 104,
+      OnChainData: 105,
+    }
+
+    let a = ''
+    arr.forEach((item, index) => {
+      if (index <= 2) {
+        a += flag[item.name]
+      }
+    })
+    let d = `${data[0].id}${a}`
+
+    const leafWitness = new MerkleWitness8(tree.getWitness(index));
+    const priorLeafIsEmpty = !idx2fields.has(index);
+    console.log(priorLeafIsEmpty, 'priorLeafIsEmpty--->>>>');
+    let priorLeafNumber: Field;
+    let newLeafNumber: Field;
+    if (!priorLeafIsEmpty) {
+      priorLeafNumber = idx2fields.get(index)![0];
+      newLeafNumber = Field(d);
+    } else {
+      priorLeafNumber = Field(0);
+      newLeafNumber = Field(1);
+    }
+
+    idx2fields.set(index, [newLeafNumber]);
+
+    const [storedNewStorageNumber, storedNewStorageSignature] =
+      await OffChainStorage.requestStore(
+        storageServerAddress,
+        pub,
+        treeHeight,
+        idx2fields,
+        NodeXMLHttpRequest
+      );
+
+    console.log('sending a transaction...', storedNewStorageNumber.toString());
+    console.log(tree.getRoot().toString(), 'sss--99')
+
+    console.log('fetch account...');
+
+    const txn2 = await Mina.transaction(deployerAccount, () => {
+      contract.updataMerkleRoot(
+        Bool(priorLeafIsEmpty),
+        priorLeafNumber,
+        newLeafNumber,
+        leafWitness,
+        storedNewStorageNumber,
+        storedNewStorageSignature
+      );
+      contract.sign(zkAppPrivateKey);
+    });
+    await txn2.send();
+
+    const u = contract.storageTreeRoot.get();
+    console.log('state after storageTreeRoot:', u.toString());
   }
+
 
   return (
     <Spin tip="Load Mina..." size="large" spinning={spinning}>
@@ -306,7 +425,7 @@ const Home: FC = () => {
           <div
             className='text-white text-xl font-medium mb-4'
             onClick={() => {
-              updateTaglist()
+              updateMerkeTreeLocal()
             }}
           >Introduction:</div>
           <div className='text-white text-base'>In the Web3 world, advertising is also a very important part. Admeta is an advertising platform that focuses on Web3. Through this project, after the user authorizes the browser to access the white list, we endow the user with a soul label by analyzing the user&apos;s behavior , with this label, users can be accurately placed with advertisements and get rewards after completing the advertisements.</div>
@@ -339,7 +458,7 @@ const Home: FC = () => {
               <div
                 className='pl-6 pr-6 pt-2 pb-2 bg-blue-900 text-white text-base font-semibold rounded mb-10 cursor-pointer hover:bg-blue-800'
                 onClick={async () => {
-
+                  // await isReady;
                   const mina = (window as any).mina;
                   if (!mina) {
                     message.error('Please install mina wallet extension!').then(() => {
