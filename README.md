@@ -33,3 +33,6 @@ We will be the largest advertising platform in the Web3 world.
 ![Search](/img/s2.png "Web3go")
 2. Metaverse & Decentraland
 ![Metaverse](/img/s3.png "Decentraland")
+
+## License
+GPLv3
